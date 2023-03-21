@@ -17,7 +17,6 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
-
 int interfaces[ROUTER_NUM_INTERFACES];
 
 int get_sock(const char *if_name)
@@ -36,7 +35,7 @@ int get_sock(const char *if_name)
 	addr.sll_family = AF_PACKET;
 	addr.sll_ifindex = intf.ifr_ifindex;
 
-	res = bind(s, (struct sockaddr *)&addr , sizeof(addr));
+	res = bind(s, (struct sockaddr *)&addr, sizeof(addr));
 	DIE(res == -1, "bind");
 	return s;
 }
@@ -44,8 +43,8 @@ int get_sock(const char *if_name)
 int send_to_link(int intidx, char *frame_data, size_t len)
 {
 	/*
-	 * Note that "buffer" should be at least the MTU size of the 
-	 * interface, eg 1500 bytes 
+	 * Note that "buffer" should be at least the MTU size of the
+	 * interface, eg 1500 bytes
 	 */
 	int ret;
 	ret = write(interfaces[intidx], frame_data, len);
@@ -72,21 +71,26 @@ int socket_receive_message(int sockfd, char *frame_data, size_t *len)
 	return 0;
 }
 
-int recv_from_any_link(char *frame_data, size_t *length) {
+int recv_from_any_link(char *frame_data, size_t *length)
+{
 	int res;
 	fd_set set;
 
 	FD_ZERO(&set);
-	while (1) {
-		for (int i = 0; i < ROUTER_NUM_INTERFACES; i++) {
+	while (1)
+	{
+		for (int i = 0; i < ROUTER_NUM_INTERFACES; i++)
+		{
 			FD_SET(interfaces[i], &set);
 		}
 
 		res = select(interfaces[ROUTER_NUM_INTERFACES - 1] + 1, &set, NULL, NULL, NULL);
 		DIE(res == -1, "select");
 
-		for (int i = 0; i < ROUTER_NUM_INTERFACES; i++) {
-			if (FD_ISSET(interfaces[i], &set)) {
+		for (int i = 0; i < ROUTER_NUM_INTERFACES; i++)
+		{
+			if (FD_ISSET(interfaces[i], &set))
+			{
 				ssize_t ret = receive_from_link(i, frame_data);
 				DIE(ret < 0, "receive_from_link");
 				*length = ret;
@@ -104,7 +108,8 @@ char *get_interface_ip(int interface)
 	int ret;
 	if (interface == 0)
 		sprintf(ifr.ifr_name, "rr-0-1");
-	else {
+	else
+	{
 		sprintf(ifr.ifr_name, "r-%u", interface - 1);
 	}
 	ret = ioctl(interfaces[interface], SIOCGIFADDR, &ifr);
@@ -118,7 +123,8 @@ void get_interface_mac(int interface, uint8_t *mac)
 	int ret;
 	if (interface == 0)
 		sprintf(ifr.ifr_name, "rr-0-1");
-	else {
+	else
+	{
 		sprintf(ifr.ifr_name, "r-%u", interface - 1);
 	}
 	ret = ioctl(interfaces[interface], SIOCGIFHWADDR, &ifr);
@@ -154,7 +160,8 @@ int hex2byte(const char *hex)
 int hwaddr_aton(const char *txt, uint8_t *addr)
 {
 	int i;
-	for (i = 0; i < 6; i++) {
+	for (i = 0; i < 6; i++)
+	{
 		int a, b;
 		a = hex2num(*txt++);
 		if (a < 0)
@@ -171,28 +178,30 @@ int hwaddr_aton(const char *txt, uint8_t *addr)
 
 void init(int argc, char *argv[])
 {
-	for (int i = 0; i < argc; ++i) {
+	for (int i = 0; i < argc; ++i)
+	{
 		printf("Setting up interface: %s\n", argv[i]);
 		interfaces[i] = get_sock(argv[i]);
 	}
 }
 
-
 uint16_t checksum(uint16_t *data, size_t len)
 {
 	unsigned long checksum = 0;
 	uint16_t extra_byte;
-	while (len > 1) {
+	while (len > 1)
+	{
 		checksum += ntohs(*data++);
 		len -= 2;
 	}
-	if (len) {
+	if (len)
+	{
 		*(uint8_t *)&extra_byte = *(uint8_t *)data;
 		checksum += extra_byte;
 	}
 
 	checksum = (checksum >> 16) + (checksum & 0xffff);
-	checksum += (checksum >>16);
+	checksum += (checksum >> 16);
 	return (uint16_t)(~checksum);
 }
 
@@ -202,18 +211,20 @@ int read_rtable(const char *path, struct route_table_entry *rtable)
 	int j = 0, i;
 	char *p, line[64];
 
-	while (fgets(line, sizeof(line), fp) != NULL) {
+	while (fgets(line, sizeof(line), fp) != NULL)
+	{
 		p = strtok(line, " .");
 		i = 0;
-		while (p != NULL) {
+		while (p != NULL)
+		{
 			if (i < 4)
-				*(((unsigned char *)&rtable[j].prefix)  + i % 4) = (unsigned char)atoi(p);
+				*(((unsigned char *)&rtable[j].prefix) + i % 4) = (unsigned char)atoi(p);
 
 			if (i >= 4 && i < 8)
-				*(((unsigned char *)&rtable[j].next_hop)  + i % 4) = atoi(p);
+				*(((unsigned char *)&rtable[j].next_hop) + i % 4) = atoi(p);
 
 			if (i >= 8 && i < 12)
-				*(((unsigned char *)&rtable[j].mask)  + i % 4) = atoi(p);
+				*(((unsigned char *)&rtable[j].mask) + i % 4) = atoi(p);
 
 			if (i == 12)
 				rtable[j].interface = atoi(p);
@@ -233,7 +244,8 @@ int parse_arp_table(char *path, struct arp_entry *arp_table)
 	DIE(f == NULL, "Failed to open %s", path);
 	char line[100];
 	int i = 0;
-	for(i = 0; fgets(line, sizeof(line), f); i++) {
+	for (i = 0; fgets(line, sizeof(line), f); i++)
+	{
 		char ip_str[50], mac_str[50];
 		sscanf(line, "%s %s", ip_str, mac_str);
 		fprintf(stderr, "IP: %s MAC: %s\n", ip_str, mac_str);
@@ -244,4 +256,12 @@ int parse_arp_table(char *path, struct arp_entry *arp_table)
 	fclose(f);
 	fprintf(stderr, "Done parsing ARP table.\n");
 	return i;
+}
+
+int compare_rtable_entries(const void *e1, const void *e2)
+{
+	struct route_table_entry e3 = *(struct route_table_entry *)e1;
+	struct route_table_entry e4 = *(struct route_table_entry *)e2;
+
+	return ((ntohl(e3.mask) - ntohl(e4.mask) == 0) ? ntohl(e3.prefix) - ntohl(e4.prefix) : ntohl(e3.mask) - ntohl(e4.mask));
 }
