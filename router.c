@@ -262,7 +262,7 @@ void arp_reply(char *buf, uint8_t *dest_mac, uint8_t *source_mac, uint32_t ip_da
 	// Send packet
 	struct in_addr ip_addr;
 	ip_addr.s_addr = ip_saddr;
-	printf("Sending packet...\n");
+	printf("Sending packet from arp reply...\n");
 	printf("Source      --- %s.\n", inet_ntoa(ip_addr));
 	ip_addr.s_addr = ip_daddr;
 	printf("Destination --- %s.\n\n", inet_ntoa(ip_addr));
@@ -330,10 +330,13 @@ void handle_arp(char *buf, struct arp_entry *arp_cache, uint_fast32_t *arp_cache
 	// Request case -> reply with the local interface MAC
 	if (arp_hdr->op == htons(1))
 	{
-		uint8_t *recieved_mac = malloc(MAC_ADDR_SIZE);
-		get_interface_mac(interface, recieved_mac);
+		uint8_t *local_mac = malloc(MAC_ADDR_SIZE);
+		get_interface_mac(interface, local_mac);
 
-		arp_reply(buf, arp_hdr->sha, recieved_mac, arp_hdr->spa, arp_hdr->tpa, interface, len);
+		uint8_t *target_mac = malloc(MAC_ADDR_SIZE);
+		memmove(target_mac, arp_hdr->sha, MAC_ADDR_SIZE);
+
+		arp_reply(buf, target_mac, local_mac, arp_hdr->spa, arp_hdr->tpa, interface, len);
 	}
 }
 
