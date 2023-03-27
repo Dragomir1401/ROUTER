@@ -239,16 +239,17 @@ void handle_arp_reply(struct arp_header *arp_hdr, struct arp_entry *arp_cache, u
 void arp_reply(char *buf, uint8_t *dest_mac, uint8_t *source_mac, uint32_t ip_daddr, uint32_t ip_saddr,
 			   int interface, int len)
 {
-	memset(buf, 0, 1600);
+	char *new_packet = malloc(MAX_PACKET_LEN);
+	memset(new_packet, 0, MAX_PACKET_LEN);
 
 	// Prepare ethernet header
-	struct ether_header *ethhdr = (struct ether_header *)(buf);
+	struct ether_header *ethhdr = (struct ether_header *)new_packet;
 	ethhdr->ether_type = htons(ETHERTYPE_ARP);
-	memcpy(ethhdr->ether_shost, source_mac, MAC_ADDR_SIZE);
-	memcpy(ethhdr->ether_dhost, dest_mac, MAC_ADDR_SIZE);
+	memmove(ethhdr->ether_shost, source_mac, MAC_ADDR_SIZE);
+	memmove(ethhdr->ether_dhost, dest_mac, MAC_ADDR_SIZE);
 
 	// Prepare ARP header
-	struct arp_header *arphdr = (struct arp_header *)(buf + sizeof(struct ether_header));
+	struct arp_header *arphdr = (struct arp_header *)(new_packet + sizeof(struct ether_header));
 	arphdr->op = htons(ARP_REPLY);
 	arphdr->ptype = htons(2048);
 	arphdr->plen = 4;
@@ -266,17 +267,17 @@ void arp_reply(char *buf, uint8_t *dest_mac, uint8_t *source_mac, uint32_t ip_da
 	printf("Source      --- %s.\n", inet_ntoa(ip_addr));
 	ip_addr.s_addr = ip_daddr;
 	printf("Destination --- %s.\n\n", inet_ntoa(ip_addr));
-	send_to_link(interface, buf, len);
+	send_to_link(interface, new_packet, len);
 }
 
 void arp_request(struct route_table_entry *LPM_router)
 {
 
 	// Create new ARP Packet
-	char *buf = malloc(1600);
+	char *buf = malloc(MAX_PACKET_LEN);
 	int interface = LPM_router->interface;
 	int len = sizeof(struct arp_header) + sizeof(struct ether_header);
-	memset(buf, 0, 1600);
+	memset(buf, 0, MAX_PACKET_LEN);
 
 	// Alloc the broadcast address
 	uint8_t *broadcast_addr = malloc(MAC_ADDR_SIZE);
@@ -312,9 +313,9 @@ void arp_request(struct route_table_entry *LPM_router)
 	send_to_link(interface, buf, len);
 }
 
-void handle_arp(char *buf, struct arp_entry *arp_cache, uint_fast32_t *arp_cache_size,
-				queue packet_queue, struct route_table_entry *rtable, uint_fast32_t *rtable_size,
-				int len, int interface)
+int handle_arp(char *buf, struct arp_entry *arp_cache, uint_fast32_t *arp_cache_size,
+			   queue packet_queue, struct route_table_entry *rtable, uint_fast32_t *rtable_size,
+			   int len, int interface)
 {
 	printf("Entering ARP protocol...\n");
 	// Extract arp header
@@ -325,6 +326,7 @@ void handle_arp(char *buf, struct arp_entry *arp_cache, uint_fast32_t *arp_cache
 	{
 		handle_arp_reply(arp_hdr, arp_cache, arp_cache_size,
 						 packet_queue, rtable, rtable_size, len);
+		return -1;
 	}
 
 	// Request case -> reply with the local interface MAC
@@ -336,8 +338,15 @@ void handle_arp(char *buf, struct arp_entry *arp_cache, uint_fast32_t *arp_cache
 		uint8_t *target_mac = malloc(MAC_ADDR_SIZE);
 		memmove(target_mac, arp_hdr->sha, MAC_ADDR_SIZE);
 
-		arp_reply(buf, target_mac, local_mac, arp_hdr->spa, arp_hdr->tpa, interface, len);
+		uint32_t sender_ip = arp_hdr->spa;
+		uint32_t reciever_ip = arp_hdr->tpa;
+
+		arp_reply(buf, target_mac, local_mac, sender_ip, reciever_ip, interface, len);
+
+		return -1;
 	}
+
+	return -1;
 }
 
 void update_checksum(struct iphdr *iphdr)
@@ -670,10 +679,10 @@ int main(int argc, char *argv[])
 		DIE(interface < 0, "Problems at recv_from_any_links\n.");
 
 		// Make a separate dynamically allocated packet
-		char *packet = malloc(MAX_PACKET_LEN);
+		char *packet = calloc(MAX_PACKET_LEN, 1);
 		memmove(packet, buf, MAX_PACKET_LEN);
 
-		struct ether_header *eth_hdr = (struct ether_header *)buf;
+		struct ether_header *eth_hdr = (struct ether_header *)packet;
 		/* Note that packets received are in network order,
 		any header field which has more than 1 byte will need to be converted to
 		host order. For example, ntohs(eth_hdr->ether_type). The oposite is needed when
@@ -695,7 +704,9 @@ int main(int argc, char *argv[])
 		// Handle ARP protocol case
 		if (ntohs(eth_hdr->ether_type) == ETHERTYPE_ARP)
 		{
-			handle_arp(packet, arp_cache, &arp_cache_size, packet_queue, rtable, &rtable_size, len, interface);
+			if (handle_arp(packet, arp_cache, &arp_cache_size, packet_queue,
+						   rtable, &rtable_size, len, interface) == -1)
+				continue;
 		}
 	}
 
