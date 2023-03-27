@@ -1,0 +1,29 @@
+-- No ICMP packet from router
+-- Packet
+###[ Ethernet ]### 
+  dst       = de:fe:c8:ed:00:00
+  src       = de:ad:be:ef:00:00
+  type      = IPv4
+###[ IP ]### 
+     version   = 4
+     ihl       = 5
+     tos       = 0x0
+     len       = 20
+     id        = 1
+     flags     = 
+     frag      = 0
+     ttl       = 1
+     proto     = hopopt
+     chksum    = 0x3895
+     src       = 192.168.0.2
+     dst       = 192.168.0.2
+     \options   \
+
+-- Packet
+###[ 802.3 ]### 
+  dst       = de:ad:be:ef:00:00
+  src       = de:fe:c8:ed:00:00
+  len       = 0
+###[ Padding ]### 
+     load      = '\x00\x00\x00\x1c\x00\x00\x00\x00\x00\x01\x00\x00\xc0\xa8\x00\x01\xc0\xa8\x00\x02\x0b\x00\xff\xf4\x00\x00\x00\x00\x08\x00\xf7\xff\x00\x00\x00\x00E\x00\x00\x14\x00\x01\x00\x00>\x00\xf7\x94\xc0\xa8\x03\x02\xc0\xa8\x01\x02\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00'
+

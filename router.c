@@ -374,7 +374,7 @@ void send_icmp_message(char *buf, int interface, struct iphdr *iphdr, struct eth
 					   struct icmphdr *icmphdr, uint8_t *dest_mac, int error_or_echo)
 {
 	// Make a copy of the original packet
-	char *copy = malloc(strlen(buf));
+	char *copy = malloc(MAX_PACKET_LEN);
 	memmove(copy, buf, strlen(buf));
 
 	// Extract a copy of the headers
@@ -419,7 +419,7 @@ void send_icmp_message(char *buf, int interface, struct iphdr *iphdr, struct eth
 		memmove(icmphdr_copy, icmphdr, sizeof(struct icmphdr));
 
 		// Send the copy created in this function
-		send_to_link(interface, copy, sizeof(struct ether_header) + sizeof(struct iphdr) + sizeof(struct icmphdr));
+		send_to_link(interface, copy, sizeof(struct ether_header) + sizeof(struct iphdr) + sizeof(struct icmphdr) + ICMP_OVER);
 	}
 }
 
