@@ -1,1 +1,105 @@
--- No packet received
+-- Excess packets:
+-- Packet
+###[ Ethernet ]### 
+  dst       = de:ad:be:ef:00:01
+  src       = de:fe:c8:ed:00:01
+  type      = IPv4
+###[ IP ]### 
+     version   = 4
+     ihl       = 5
+     tos       = 0x0
+     len       = 20
+     id        = 1
+     flags     = 
+     frag      = 0
+     ttl       = 63
+     proto     = hopopt
+     chksum    = 0xf994
+     src       = 192.168.0.2
+     dst       = 192.168.1.2
+     \options   \
+
+-- Packet
+###[ Ethernet ]### 
+  dst       = ff:ff:ff:ff:ff:ff
+  src       = de:ad:be:ef:00:01
+  type      = ARP
+###[ ARP ]### 
+     hwtype    = 0x1
+     ptype     = IPv4
+     hwlen     = 6
+     plen      = 4
+     op        = who-has
+     hwsrc     = de:ad:be:ef:00:01
+     psrc      = 192.168.1.2
+     hwdst     = 00:00:00:00:00:00
+     pdst      = 192.168.1.1
+
+-- Packet
+###[ Ethernet ]### 
+  dst       = 00:00:00:00:00:00
+  src       = de:fe:c8:ed:00:01
+  type      = ARP
+###[ ARP ]### 
+     hwtype    = 0x1
+     ptype     = IPv4
+     hwlen     = 6
+     plen      = 4
+     op        = is-at
+     hwsrc     = de:fe:c8:ed:00:01
+     psrc      = 192.168.1.1
+     hwdst     = de:fe:c8:ed:00:01
+     pdst      = 192.168.1.2
+
+-- Packet
+###[ Ethernet ]### 
+  dst       = de:ad:be:ef:00:01
+  src       = de:fe:c8:ed:00:01
+  type      = IPv4
+###[ IP ]### 
+     version   = 4
+     ihl       = 5
+     tos       = 0x0
+     len       = 20
+     id        = 1
+     flags     = 
+     frag      = 0
+     ttl       = 63
+     proto     = hopopt
+     chksum    = 0xf994
+     src       = 192.168.0.2
+     dst       = 192.168.1.2
+     \options   \
+
+-- Packet
+###[ Ethernet ]### 
+  dst       = ff:ff:ff:ff:ff:ff
+  src       = de:ad:be:ef:00:01
+  type      = ARP
+###[ ARP ]### 
+     hwtype    = 0x1
+     ptype     = IPv4
+     hwlen     = 6
+     plen      = 4
+     op        = who-has
+     hwsrc     = de:ad:be:ef:00:01
+     psrc      = 192.168.1.2
+     hwdst     = 00:00:00:00:00:00
+     pdst      = 192.168.1.1
+
+-- Packet
+###[ Ethernet ]### 
+  dst       = 00:00:00:00:00:00
+  src       = de:fe:c8:ed:00:01
+  type      = ARP
+###[ ARP ]### 
+     hwtype    = 0x1
+     ptype     = IPv4
+     hwlen     = 6
+     plen      = 4
+     op        = is-at
+     hwsrc     = de:fe:c8:ed:00:01
+     psrc      = 192.168.1.1
+     hwdst     = de:fe:c8:ed:00:01
+     pdst      = 192.168.1.2
+

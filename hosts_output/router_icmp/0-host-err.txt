@@ -1,4 +1,4 @@
--- No packet received
+-- No ICMP packet from router
 -- Packet
 ###[ Ethernet ]### 
   dst       = de:fe:c8:ed:00:00
@@ -24,4 +24,12 @@
         chksum    = 0xf7ff
         id        = 0x0
         seq       = 0x0
+
+-- Packet
+###[ 802.3 ]### 
+  dst       = de:ad:be:ef:00:00
+  src       = de:fe:c8:ed:00:00
+  len       = 0
+###[ Padding ]### 
+     load      = '\x00\x00\x00\x1c\x00\x00\x00\x00\x00\x011~\xc0\xa8\x00\x01\xc0\xa8\x00\x02\x00\x00\xff\xff\xcb\x7f\x00\x00'
 
