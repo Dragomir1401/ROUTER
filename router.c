@@ -371,11 +371,11 @@ void update_checksum(struct iphdr *iphdr)
 }
 
 void send_icmp_message(char *buf, int interface, struct iphdr *iphdr, struct ether_header *ethhdr,
-					   struct icmphdr *icmphdr, uint8_t *dest_mac, int error_or_echo)
+					   struct icmphdr *icmphdr, uint8_t *dest_mac, uint8_t *source_mac, int error_or_echo)
 {
 	// Make a copy of the original packet
 	char *copy = malloc(MAX_PACKET_LEN);
-	memmove(copy, buf, strlen(buf));
+	memmove(copy, buf, MAX_PACKET_LEN);
 
 	// Extract a copy of the headers
 	struct ether_header *ethhdr_copy = (struct ether_header *)copy;
@@ -383,8 +383,8 @@ void send_icmp_message(char *buf, int interface, struct iphdr *iphdr, struct eth
 	struct icmphdr *icmphdr_copy = (struct icmphdr *)(copy + sizeof(struct ether_header) + sizeof(struct iphdr));
 
 	// Update mac of source and destination at ethernet level
-	memmove(ethhdr_copy->ether_dhost, ethhdr->ether_shost, MAC_ADDR_SIZE);
-	memmove(ethhdr_copy->ether_shost, dest_mac, MAC_ADDR_SIZE);
+	memmove(ethhdr_copy->ether_dhost, dest_mac, MAC_ADDR_SIZE);
+	memmove(ethhdr_copy->ether_shost, source_mac, MAC_ADDR_SIZE);
 
 	// Update ip addresses of sender and destination at network level and update ip protocol and size
 	iphdr_copy->daddr = iphdr->saddr;
@@ -434,6 +434,9 @@ int check_ttl(struct ether_header *ethhdr, struct iphdr *iphdr, char *buf, int i
 		uint8_t *dest_mac = malloc(MAC_ADDR_SIZE);
 		memmove(dest_mac, ethhdr->ether_dhost, MAC_ADDR_SIZE);
 
+		uint8_t *source_mac = malloc(MAC_ADDR_SIZE);
+		memmove(source_mac, ethhdr->ether_shost, MAC_ADDR_SIZE);
+
 		// Create ICMP header for sending ICMP message
 		struct icmphdr icmphdr;
 		memset(&icmphdr, 0, sizeof(struct icmphdr));
@@ -443,7 +446,7 @@ int check_ttl(struct ether_header *ethhdr, struct iphdr *iphdr, char *buf, int i
 		icmphdr.checksum = checksum((uint16_t *)&icmphdr, sizeof(struct icmphdr));
 
 		// Send ICMP error
-		send_icmp_message(buf, interface, iphdr, ethhdr, &icmphdr, dest_mac, ERROR);
+		send_icmp_message(buf, interface, iphdr, ethhdr, &icmphdr, source_mac, dest_mac, ERROR);
 
 		return -1;
 	}
@@ -480,9 +483,12 @@ int search_destination(struct iphdr *iphdr, struct ether_header *ethhdr, struct 
 		printf("Source   -- %s.\n", inet_ntoa(ip_addr));
 		printf("Next hop -- [Destination unreachable] from the route table.\n\n");
 
-		// Save destination MAC for ICMP
-		uint8_t *dest_mac = malloc(sizeof(MAC_ADDR_SIZE));
+		// Save destination MAC and source MAC for ICMP
+		uint8_t *dest_mac = malloc(MAC_ADDR_SIZE);
 		memmove(dest_mac, ethhdr->ether_dhost, MAC_ADDR_SIZE);
+
+		uint8_t *source_mac = malloc(MAC_ADDR_SIZE);
+		memmove(source_mac, ethhdr->ether_shost, MAC_ADDR_SIZE);
 
 		// Create new ICMP Header for error
 		struct icmphdr icmphdr;
@@ -493,7 +499,7 @@ int search_destination(struct iphdr *iphdr, struct ether_header *ethhdr, struct 
 		icmphdr.checksum = checksum((uint16_t *)&icmphdr, sizeof(struct icmphdr));
 
 		// Send icmp error
-		send_icmp_message(buf, interface, iphdr, ethhdr, &icmphdr, dest_mac, ERROR);
+		send_icmp_message(buf, interface, iphdr, ethhdr, &icmphdr, source_mac, dest_mac, ERROR);
 		return -1;
 	}
 
@@ -552,9 +558,12 @@ int search_destination(struct iphdr *iphdr, struct ether_header *ethhdr, struct 
 void icmp_echo(struct iphdr *iphdr, struct ether_header *ethhdr, struct icmphdr *icmphdr,
 			   int interface, char *buf)
 {
-	// Save destination MAC for ICMP
+	// Save destination MAC and source MAC for ICMP
 	uint8_t *dest_mac = malloc(MAC_ADDR_SIZE);
 	memmove(dest_mac, ethhdr->ether_dhost, MAC_ADDR_SIZE);
+
+	uint8_t *source_mac = malloc(MAC_ADDR_SIZE);
+	memmove(source_mac, ethhdr->ether_shost, MAC_ADDR_SIZE);
 
 	// Create new ICMP Header for error
 	struct icmphdr new_icmphdr;
@@ -565,7 +574,7 @@ void icmp_echo(struct iphdr *iphdr, struct ether_header *ethhdr, struct icmphdr 
 	new_icmphdr.checksum = checksum((uint16_t *)&icmphdr, sizeof(struct icmphdr));
 
 	// Send icmp echo
-	send_icmp_message(buf, interface, iphdr, ethhdr, &new_icmphdr, dest_mac, ECHO);
+	send_icmp_message(buf, interface, iphdr, ethhdr, &new_icmphdr, source_mac, dest_mac, ECHO);
 }
 
 int handle_ipv4(char *buf, int interface, int len, struct arp_entry *arp_cache, uint_fast32_t *arp_cache_size,
