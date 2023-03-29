@@ -4,6 +4,7 @@
 #include <inttypes.h>
 #include <arpa/inet.h>
 #include <netdb.h>
+#include <stddef.h>
 #include "queue.h"
 #include "lib.h"
 #include "protocols.h"
@@ -17,6 +18,7 @@
 #define DEST_UNREACH 3
 #define ECHO_REPLY 0
 #define ARP_REPLY 2
+#define ETH_P_IP 0x0800
 #define ARP_REQUEST 1
 #define ICMP_OVER 64
 #define ICMP_ECHO 8
@@ -216,21 +218,26 @@ void pop_from_queue(queue packet_queue, struct arp_entry *arp_cache, uint_fast32
 void handle_arp_reply(struct arp_header *arp_hdr, struct arp_entry *arp_cache, uint_fast32_t *arp_cache_size,
 					  queue packet_queue, struct route_table_entry *rtable, uint_fast32_t *rtable_size, int len)
 {
-	printf("Handling ARP reply...\n");
-	struct in_addr ip_addr;
-	ip_addr.s_addr = arp_hdr->spa;
-	printf("Source   -- %s.\n", inet_ntoa(ip_addr));
-	ip_addr.s_addr = arp_hdr->tpa;
-	printf("Next hop -- %s. from the route table.\n\n", inet_ntoa(ip_addr));
+	// Handle ARP reply
+	fprintf(stderr, "Handling ARP reply...\n");
 
-	// Update the ARP cache with the new recieved entry
-	struct arp_entry *new_entry = malloc(sizeof(struct arp_entry));
-	DIE(new_entry == NULL, "Error at allocating memory for new ARP cache entry.\n");
+	// Print source IP address
+	char source_addr_str[INET_ADDRSTRLEN];
+	inet_ntop(AF_INET, &(arp_hdr->spa), source_addr_str, INET_ADDRSTRLEN);
+	fprintf(stderr, "Source IP address: %s\n", source_addr_str);
 
-	// Fill IP and MAC for the new entry
-	new_entry->ip = arp_hdr->spa;
-	memmove(new_entry->mac, arp_hdr->sha, MAC_ADDR_SIZE);
-	add_arp_cache_entry(arp_cache, arp_cache_size, new_entry);
+	// Print next hop IP address
+	char next_hop_addr_str[INET_ADDRSTRLEN];
+	inet_ntop(AF_INET, &(arp_hdr->tpa), next_hop_addr_str, INET_ADDRSTRLEN);
+	fprintf(stderr, "Next hop IP address: %s\n", next_hop_addr_str);
+
+	// Create a new ARP cache entry
+	struct arp_entry new_entry = {
+		.ip = arp_hdr->spa,
+	};
+
+	memcpy(new_entry.mac, arp_hdr->sha, MAC_ADDR_SIZE);
+	add_arp_cache_entry(arp_cache, arp_cache_size, &new_entry);
 
 	// Check if the packet can be sent now
 	pop_from_queue(packet_queue, arp_cache, *arp_cache_size, rtable, *rtable_size, len);
@@ -239,78 +246,79 @@ void handle_arp_reply(struct arp_header *arp_hdr, struct arp_entry *arp_cache, u
 void arp_reply(char *buf, uint8_t *dest_mac, uint8_t *source_mac, uint32_t ip_daddr, uint32_t ip_saddr,
 			   int interface, int len)
 {
-	char *new_packet = malloc(MAX_PACKET_LEN);
-	memset(new_packet, 0, MAX_PACKET_LEN);
+	// Allocate memory for new packet and zero it out
+	char *new_packet = calloc(MAX_PACKET_LEN, sizeof(char));
 
 	// Prepare ethernet header
-	struct ether_header *ethhdr = (struct ether_header *)new_packet;
-	ethhdr->ether_type = htons(ETHERTYPE_ARP);
-	memmove(ethhdr->ether_shost, source_mac, MAC_ADDR_SIZE);
-	memmove(ethhdr->ether_dhost, dest_mac, MAC_ADDR_SIZE);
+	struct ether_header ethhdr = {
+		.ether_type = htons(ETHERTYPE_ARP),
+	};
+	memmove(ethhdr.ether_shost, source_mac, MAC_ADDR_SIZE);
+	memmove(ethhdr.ether_dhost, dest_mac, MAC_ADDR_SIZE);
+	memmove(new_packet, &ethhdr, sizeof(struct ether_header));
 
 	// Prepare ARP header
-	struct arp_header *arphdr = (struct arp_header *)(new_packet + sizeof(struct ether_header));
-	arphdr->op = htons(ARP_REPLY);
-	arphdr->ptype = htons(2048);
-	arphdr->plen = 4;
-	arphdr->htype = htons(1);
-	arphdr->hlen = 6;
-	memmove(arphdr->sha, source_mac, MAC_ADDR_SIZE);
-	memmove(arphdr->tha, dest_mac, MAC_ADDR_SIZE);
-	arphdr->spa = ip_saddr;
-	arphdr->tpa = ip_daddr;
+	struct arp_header arphdr = {
+		.op = htons(ARP_REPLY),
+		.ptype = htons(2048),
+		.plen = 4,
+		.htype = htons(1),
+		.hlen = 6,
+	};
+	memmove(arphdr.sha, source_mac, MAC_ADDR_SIZE);
+	memmove(arphdr.tha, dest_mac, MAC_ADDR_SIZE);
+	arphdr.spa = ip_saddr;
+	arphdr.tpa = ip_daddr;
+	memmove(new_packet + sizeof(struct ether_header), &arphdr, sizeof(struct arp_header));
 
 	// Send packet
-	struct in_addr ip_addr;
-	ip_addr.s_addr = ip_saddr;
 	printf("Sending packet from arp reply...\n");
-	printf("Source      --- %s.\n", inet_ntoa(ip_addr));
-	ip_addr.s_addr = ip_daddr;
-	printf("Destination --- %s.\n\n", inet_ntoa(ip_addr));
+	printf("Source      --- %s.\n", inet_ntoa(*(struct in_addr *)&ip_saddr));
+	printf("Destination --- %s.\n\n", inet_ntoa(*(struct in_addr *)&ip_daddr));
 	send_to_link(interface, new_packet, len);
+
+	// Free memory
+	free(new_packet);
 }
 
-void arp_request(struct route_table_entry *LPM_router)
+void arp_request(struct route_table_entry *router_entry)
 {
+	// Prepare Ethernet and ARP headers
+	struct ether_header eth_header = {
+		.ether_type = htons(ETHERTYPE_ARP),
+	};
+	struct arp_header arp_header = {
+		.htype = htons(1), // Ethernet
+		.ptype = htons(ETH_P_IP),
+		.hlen = MAC_ADDR_SIZE,
+		.plen = sizeof(in_addr_t),
+		.op = htons(ARP_REQUEST),
+	};
+	get_interface_mac(router_entry->interface, eth_header.ether_shost);
+	memcpy(eth_header.ether_dhost, "\xff\xff\xff\xff\xff\xff", MAC_ADDR_SIZE);
+	get_interface_mac(router_entry->interface, arp_header.sha);
+	arp_header.spa = inet_addr(get_interface_ip(router_entry->interface));
+	arp_header.tpa = router_entry->next_hop;
+	memset(arp_header.tha, 0, MAC_ADDR_SIZE);
 
-	// Create new ARP Packet
-	char *buf = malloc(MAX_PACKET_LEN);
-	int interface = LPM_router->interface;
-	int len = sizeof(struct arp_header) + sizeof(struct ether_header);
-	memset(buf, 0, MAX_PACKET_LEN);
+	// Allocate buffer and copy Ethernet and ARP headers
+	char *packet_buffer = malloc(MAX_PACKET_LEN);
+	if (!packet_buffer)
+	{
+		perror("Malloc for new packet buffer.\n");
+		return;
+	}
+	memcpy(packet_buffer, &eth_header, sizeof(struct ether_header));
+	memcpy(packet_buffer + sizeof(struct ether_header), &arp_header, sizeof(struct arp_header));
 
-	// Alloc the broadcast address
-	uint8_t *broadcast_addr = malloc(MAC_ADDR_SIZE);
-	hwaddr_aton("ff:ff:ff:ff:ff:ff", broadcast_addr);
+	// Send the ARP request packet
+	printf("Sending ARP request from %s to %s\n",
+		   inet_ntoa(*(struct in_addr *)&arp_header.spa),
+		   inet_ntoa(*(struct in_addr *)&arp_header.tpa));
+	send_to_link(router_entry->interface, packet_buffer, sizeof(struct ether_header) + sizeof(struct arp_header));
 
-	// Create ethernet header for the packet
-	struct ether_header *ethhdr = (struct ether_header *)buf;
-	ethhdr->ether_type = ntohs(ETHERTYPE_ARP);
-	get_interface_mac(LPM_router->interface, ethhdr->ether_shost);
-	memcpy(ethhdr->ether_dhost, broadcast_addr, MAC_ADDR_SIZE);
-
-	// Create the ARP header for the apcket
-	struct arp_header *arphdr = (struct arp_header *)(buf + sizeof(struct ether_header));
-
-	arphdr->op = htons(ARP_REQUEST);
-	arphdr->ptype = htons(2048); /* aka 0x0800 */
-	arphdr->plen = 4;
-	arphdr->htype = htons(1); /* Ethernet */
-	arphdr->hlen = MAC_ADDR_SIZE;
-
-	get_interface_mac(LPM_router->interface, arphdr->sha);
-	arphdr->spa = inet_addr(get_interface_ip(LPM_router->interface));
-	arphdr->tpa = LPM_router->next_hop;
-	// Send to broadcast address for the request
-	memcpy(arphdr->tha, broadcast_addr, MAC_ADDR_SIZE);
-
-	// Print with correct layout
-	struct in_addr ip_addr;
-	ip_addr.s_addr = arphdr->spa;
-	printf("Sending ARP request...\n");
-	printf("Source   -- %s.\n\n", inet_ntoa(ip_addr));
-
-	send_to_link(interface, buf, len);
+	// Clean up
+	free(packet_buffer);
 }
 
 int handle_arp(char *buf, struct arp_entry *arp_cache, uint_fast32_t *arp_cache_size,
@@ -373,24 +381,28 @@ void update_checksum(struct iphdr *iphdr)
 void send_icmp_message(char *buf, int interface, struct iphdr *iphdr, struct ether_header *ethhdr,
 					   struct icmphdr *icmphdr, uint8_t *dest_mac, uint8_t *source_mac, int error_or_echo)
 {
-	// Make a copy of the original packet
-	char *copy = malloc(MAX_PACKET_LEN);
-	memmove(copy, buf, MAX_PACKET_LEN);
+	// Create a new packet buffer
+	char new_packet[MAX_PACKET_LEN];
+	memset(new_packet, 0, MAX_PACKET_LEN);
 
-	// Extract a copy of the headers
-	struct ether_header *ethhdr_copy = (struct ether_header *)copy;
-	struct iphdr *iphdr_copy = (struct iphdr *)(copy + sizeof(struct ether_header));
-	struct icmphdr *icmphdr_copy = (struct icmphdr *)(copy + sizeof(struct ether_header) + sizeof(struct iphdr));
+	// Copy the original headers and data into the new packet buffer
+	memmove(new_packet, buf, MAX_PACKET_LEN);
 
-	// Update mac of source and destination at ethernet level
-	memmove(ethhdr_copy->ether_dhost, dest_mac, MAC_ADDR_SIZE);
-	memmove(ethhdr_copy->ether_shost, source_mac, MAC_ADDR_SIZE);
+	// Update the MAC addresses in the Ethernet header
+	memmove(new_packet, dest_mac, MAC_ADDR_SIZE);
+	memmove(new_packet + MAC_ADDR_SIZE, source_mac, MAC_ADDR_SIZE);
 
-	// Update ip addresses of sender and destination at network level and update ip protocol and size
-	iphdr_copy->daddr = iphdr->saddr;
-	iphdr_copy->saddr = inet_addr(get_interface_ip(interface));
-	iphdr_copy->protocol = IPPROTO_ICMP;
-	iphdr_copy->tot_len = htons(sizeof(struct iphdr) + sizeof(struct icmphdr));
+	// Update the IP addresses in the IP header
+	memmove(new_packet + sizeof(struct ether_header) + offsetof(struct iphdr, daddr), &iphdr->saddr, sizeof(uint32_t));
+	memmove(new_packet + sizeof(struct ether_header) + offsetof(struct iphdr, saddr), &iphdr->daddr, sizeof(uint32_t));
+
+	// Update the protocol field in the IP header
+	uint8_t protocol = IPPROTO_ICMP;
+	memmove(new_packet + sizeof(struct ether_header) + offsetof(struct iphdr, protocol), &protocol, sizeof(uint8_t));
+
+	// Update the total length field in the IP header
+	uint16_t total_len = htons(sizeof(struct iphdr) + sizeof(struct icmphdr));
+	memmove(new_packet + sizeof(struct ether_header) + offsetof(struct iphdr, tot_len), &total_len, sizeof(uint16_t));
 
 	if (error_or_echo == -1)
 	// Error case
@@ -401,12 +413,12 @@ void send_icmp_message(char *buf, int interface, struct iphdr *iphdr, struct eth
 		char *over_ip = malloc(ICMP_OVER);
 		memmove(over_ip, buf + sizeof(struct ether_header) + sizeof(struct iphdr), ICMP_OVER);
 
-		// Update ICMP header and add the additional 64 bytes
-		memmove(icmphdr_copy, icmphdr, sizeof(struct icmphdr));
-		memmove(copy + sizeof(struct ether_header) + sizeof(struct iphdr) + sizeof(struct icmphdr), over_ip, ICMP_OVER);
+		// Update the ICMP header and add the additional 64 bytes
+		memmove(new_packet + sizeof(struct ether_header) + sizeof(struct iphdr), icmphdr, sizeof(struct icmphdr));
+		memmove(new_packet + sizeof(struct ether_header) + sizeof(struct iphdr) + sizeof(struct icmphdr), over_ip, ICMP_OVER);
 
-		// Send the copy created in this function
-		send_to_link(interface, copy, sizeof(struct ether_header) + sizeof(struct iphdr) + sizeof(struct icmphdr) + ICMP_OVER);
+		// Send the new packet
+		send_to_link(interface, new_packet, sizeof(struct ether_header) + sizeof(struct iphdr) + sizeof(struct icmphdr) + ICMP_OVER);
 
 		return;
 	}
@@ -415,14 +427,13 @@ void send_icmp_message(char *buf, int interface, struct iphdr *iphdr, struct eth
 	{
 		printf("Sending ICMP echo from %d to %d.\n", iphdr->saddr, iphdr->daddr);
 
-		/* Update ICMP Header */
-		memmove(icmphdr_copy, icmphdr, sizeof(struct icmphdr));
+		// Update the ICMP header
+		memmove(new_packet + sizeof(struct ether_header) + sizeof(struct iphdr), icmphdr, sizeof(struct icmphdr));
 
-		// Send the copy created in this function
-		send_to_link(interface, copy, sizeof(struct ether_header) + sizeof(struct iphdr) + sizeof(struct icmphdr) + ICMP_OVER);
+		// Send the new packet
+		send_to_link(interface, new_packet, sizeof(struct ether_header) + sizeof(struct iphdr) + sizeof(struct icmphdr));
 	}
 }
-
 int check_ttl(struct ether_header *ethhdr, struct iphdr *iphdr, char *buf, int interface)
 {
 	// Throw packages with ttl 0 or 1
@@ -438,15 +449,25 @@ int check_ttl(struct ether_header *ethhdr, struct iphdr *iphdr, char *buf, int i
 		memmove(source_mac, ethhdr->ether_shost, MAC_ADDR_SIZE);
 
 		// Create ICMP header for sending ICMP message
-		struct icmphdr icmphdr;
-		memset(&icmphdr, 0, sizeof(struct icmphdr));
-		icmphdr.code = 0;
-		icmphdr.type = TIME_EXCEEDED;
-		icmphdr.checksum = 0;
-		icmphdr.checksum = checksum((uint16_t *)&icmphdr, sizeof(struct icmphdr));
+		struct icmphdr *icmphdr = malloc(sizeof(struct icmphdr));
+		icmphdr->type = TIME_EXCEEDED;
+		icmphdr->code = 0;
+		icmphdr->checksum = 0;
+
+		// Set the identifier and sequence number to zero
+		icmphdr->un.echo.id = 0;
+		icmphdr->un.echo.sequence = 0;
+
+		// Compute the ICMP header checksum
+		uint16_t *icmpbuf = (uint16_t *)icmphdr;
+		icmphdr->checksum = checksum(icmpbuf, sizeof(struct icmphdr));
 
 		// Send ICMP error
-		send_icmp_message(buf, interface, iphdr, ethhdr, &icmphdr, source_mac, dest_mac, ERROR);
+		send_icmp_message(buf, interface, iphdr, ethhdr, icmphdr, source_mac, dest_mac, ERROR);
+
+		free(icmphdr);
+		free(dest_mac);
+		free(source_mac);
 
 		return -1;
 	}
@@ -457,11 +478,12 @@ int check_ttl(struct ether_header *ethhdr, struct iphdr *iphdr, char *buf, int i
 
 int search_ip_arp_cache(struct arp_entry *arp_table, int arp_table_len, uint32_t searched_ip, uint8_t *mac_targeted)
 {
-	for (int i = 0; i < arp_table_len; i++)
+	struct arp_entry *entry;
+	for (entry = arp_table; entry < arp_table + arp_table_len; ++entry)
 	{
-		if (arp_table[i].ip == searched_ip)
+		if (entry->ip == searched_ip)
 		{
-			memmove(mac_targeted, &arp_table[i].mac, MAC_ADDR_SIZE);
+			memcpy(mac_targeted, entry->mac, MAC_ADDR_SIZE);
 			return 0;
 		}
 	}
@@ -483,23 +505,31 @@ int search_destination(struct iphdr *iphdr, struct ether_header *ethhdr, struct 
 		printf("Source   -- %s.\n", inet_ntoa(ip_addr));
 		printf("Next hop -- [Destination unreachable] from the route table.\n\n");
 
-		// Save destination MAC and source MAC for ICMP
+		// Create new ICMP header for error
+		struct icmphdr icmp_header = {
+			.type = DEST_UNREACH,
+			.code = 0,
+			.checksum = 0,
+		};
+
+		// Calculate the checksum for the ICMP header
+		icmp_header.checksum = checksum((uint16_t *)&icmp_header, sizeof(icmp_header));
+
+		// Allocate memory for the source and destination MAC addresses
 		uint8_t *dest_mac = malloc(MAC_ADDR_SIZE);
-		memmove(dest_mac, ethhdr->ether_dhost, MAC_ADDR_SIZE);
-
 		uint8_t *source_mac = malloc(MAC_ADDR_SIZE);
-		memmove(source_mac, ethhdr->ether_shost, MAC_ADDR_SIZE);
 
-		// Create new ICMP Header for error
-		struct icmphdr icmphdr;
-		memset(&icmphdr, 0, sizeof(struct icmphdr));
-		icmphdr.code = 0;
-		icmphdr.type = DEST_UNREACH;
-		icmphdr.checksum = 0;
-		icmphdr.checksum = checksum((uint16_t *)&icmphdr, sizeof(struct icmphdr));
+		// Copy the MAC addresses from the Ethernet header
+		memcpy(dest_mac, ethhdr->ether_dhost, MAC_ADDR_SIZE);
+		memcpy(source_mac, ethhdr->ether_shost, MAC_ADDR_SIZE);
 
-		// Send icmp error
-		send_icmp_message(buf, interface, iphdr, ethhdr, &icmphdr, source_mac, dest_mac, ERROR);
+		// Send ICMP error message
+		send_icmp_message(buf, interface, iphdr, ethhdr, &icmp_header, source_mac, dest_mac, ERROR);
+
+		// Free the allocated memory for the MAC addresses
+		free(dest_mac);
+		free(source_mac);
+
 		return -1;
 	}
 
@@ -558,23 +588,27 @@ int search_destination(struct iphdr *iphdr, struct ether_header *ethhdr, struct 
 void icmp_echo(struct iphdr *iphdr, struct ether_header *ethhdr, struct icmphdr *icmphdr,
 			   int interface, char *buf)
 {
-	// Save destination MAC and source MAC for ICMP
+	// Allocate memory for destination and source MAC addresses
 	uint8_t *dest_mac = malloc(MAC_ADDR_SIZE);
-	memmove(dest_mac, ethhdr->ether_dhost, MAC_ADDR_SIZE);
-
 	uint8_t *source_mac = malloc(MAC_ADDR_SIZE);
-	memmove(source_mac, ethhdr->ether_shost, MAC_ADDR_SIZE);
+
+	// Copy destination and source MAC addresses
+	memcpy(dest_mac, ethhdr->ether_dhost, MAC_ADDR_SIZE);
+	memcpy(source_mac, ethhdr->ether_shost, MAC_ADDR_SIZE);
 
 	// Create new ICMP Header for error
-	struct icmphdr new_icmphdr;
-	memset(&icmphdr, 0, sizeof(struct icmphdr));
-	new_icmphdr.code = 0;
-	new_icmphdr.type = ECHO_REPLY;
-	new_icmphdr.checksum = 0;
-	new_icmphdr.checksum = checksum((uint16_t *)&icmphdr, sizeof(struct icmphdr));
+	struct icmphdr new_icmphdr = {
+		.code = 0,
+		.type = ECHO_REPLY,
+		.checksum = 0};
+	new_icmphdr.checksum = checksum((uint16_t *)&new_icmphdr, sizeof(struct icmphdr));
 
 	// Send icmp echo
 	send_icmp_message(buf, interface, iphdr, ethhdr, &new_icmphdr, source_mac, dest_mac, ECHO);
+
+	// Free memory for destination and source MAC addresses
+	free(dest_mac);
+	free(source_mac);
 }
 
 int handle_ipv4(char *buf, int interface, int len, struct arp_entry *arp_cache, uint_fast32_t *arp_cache_size,
@@ -630,19 +664,21 @@ int handle_ipv4(char *buf, int interface, int len, struct arp_entry *arp_cache, 
 
 	return 0;
 }
+
 int compare_MAC(uint8_t *addr1, uint8_t *addr2)
 {
-	for (int i = 0; i < MAC_ADDR_SIZE; i++)
+	int i = 0;
+	while (i < MAC_ADDR_SIZE && addr1[i] == addr2[i])
 	{
-		if (addr1[i] != addr2[i])
-		{
-			// They are not equal
-			return -1;
-		}
+		i++;
 	}
-
-	// They are equal
-	return 0;
+	if (i == MAC_ADDR_SIZE)
+	{
+		// They are equal
+		return 0;
+	}
+	// They are not equal
+	return -1;
 }
 
 int validate_L2(struct ether_header *eth_hdr, uint8_t *broadcast_addr, int interface)

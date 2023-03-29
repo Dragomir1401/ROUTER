@@ -21,14 +21,8 @@ Source      --- 192.168.0.2.
 Destination --- 192.168.1.2.
 Interface: 1
 
-Sending ARP request...
-Source   -- 192.168.1.1.
-
+Sending ARP request from 192.168.1.1 to 192.168.1.1
 Entering ARP protocol...
-Handling ARP reply...
-Source   -- 192.168.1.2.
-Next hop -- 192.168.1.1. from the route table.
-
 Adding entry in arp cache: ip: 192.168.1.2 mac: de:ad:be:ef:00:01.
 
 Found route for packet dequeued:
@@ -57,14 +51,8 @@ Source      --- 192.168.1.2.
 Destination --- 192.168.0.2.
 Interface: 2
 
-Sending ARP request...
-Source   -- 192.168.0.1.
-
+Sending ARP request from 192.168.0.1 to 192.168.0.1
 Entering ARP protocol...
-Handling ARP reply...
-Source   -- 192.168.0.2.
-Next hop -- 192.168.0.1. from the route table.
-
 Adding entry in arp cache: ip: 192.168.0.2 mac: de:ad:be:ef:00:00.
 
 Found route for packet dequeued:
@@ -219,6 +207,11 @@ Source      --- 192.168.1.2.
 Destination --- 192.168.0.2.
 Interface: 1
 
+Entering ARP protocol...
+Sending packet from arp reply...
+Source      --- 192.168.1.1.
+Destination --- 192.168.1.2.
+
 Entering IPv4 protocol...
 Recieved IPv4 package...
 Source      --- 192.168.0.2.
@@ -275,14 +268,8 @@ Source      --- 192.168.0.2.
 Destination --- 192.168.3.2.
 Interface: 1
 
-Sending ARP request...
-Source   -- 192.0.1.1.
-
+Sending ARP request from 192.0.1.1 to 192.0.1.1
 Entering ARP protocol...
-Handling ARP reply...
-Source   -- 192.0.1.2.
-Next hop -- 192.0.1.1. from the route table.
-
 Adding entry in arp cache: ip: 192.0.1.2 mac: ca:fe:ba:be:01:00.
 
 Found route for packet dequeued:
@@ -297,20 +284,12 @@ MAC destin  --- ca:fe:ba:be:01:00
 Via interface 0.
 
 Entering ARP protocol...
-Handling ARP reply...
-Source   -- 192.0.1.2.
-Next hop -- 192.0.1.1. from the route table.
-
 Entering ARP protocol...
 Sending packet from arp reply...
 Source      --- 192.0.1.1.
 Destination --- 192.0.1.2.
 
 Entering ARP protocol...
-Handling ARP reply...
-Source   -- 192.0.1.1.
-Next hop -- 192.0.1.2. from the route table.
-
 Adding entry in arp cache: ip: 192.0.1.1 mac: ca:fe:ba:be:00:01.
 
 Entering IPv4 protocol...
