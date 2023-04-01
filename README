@@ -1,195 +1,182 @@
-N_HOSTS = 4
+______________________________
+|                            |
+|   Copyright                |
+|      Dragomir Andrei 2023  |
+|                            |
+|____________________________|
 
-# For the full topology
-N_ROUTERS = 2
-N_HOSTSEACH = 2
+---------------------------------------------------------------------
+Nume: Dragomir Andrei
+Grupa: 322CA
 
-R_OUTFILE = "router_out.txt"
-R_ERRFILE = "router_err.txt"
-LOGDIR = "hosts_output"
-ARP_TABLE = "arp_table.txt"
+NETWORK PROTOCOLS
 
-# If this is low there are bunch of annoying race conditions; this makes
-# testing last veeeery long, but at least it's somewhat robust even on
-# low-resource machines.
-TIMEOUT = 4
+----------------------------------------------------------------------------
+------------------------DATAPLANE ROUTER------------------------------------
+----------------------------------------------------------------------------
 
-BASE_FORMATS = {
-        "host_name": "h-{}",
-        "router_if_name": "r-{}",
-        "host_if_name": "h-{}",
-        "router_ip": "192.168.{}.1",
-        "router_name": "router-{}",
-        "host_ip": "192.168.{}.2",
-        "router_mac": "de:fe:c8:ed:{1:02X}:{0:02X}",
-        "host_mac": "de:ad:be:ef:00:{:02X}",
-        "output_file": "{}-host-out.txt",
-        "error_file": "{}-host-err.txt",
-        "r2r_ip1": "192.{}.{}.1",
-        "r2r_ip2": "192.{}.{}.2",
-        "r2r_if_name": "rr-{}-{}",
-        "r2r_mac": "ca:fe:ba:be:{:02X}:{:02X}",
-        "out_file": "router_{}_out",
-        "err_file": "router_{}_err",
-        "rtable": "rtable{}.txt"
-}
+								CONTENT
+
+	- router.c - implementation of the router dataplane using various NETWORK
+                     protocols.
+
+	- lib.c - library used functions for send/receive.
+              util directory.
+
+	- Makefile.
+
+	- README.
 
 
-def get(value, first=None, second=None):
-    return BASE_FORMATS[value].format(first, second)
-N_HOSTS = 4
+----------------------------------------------------------------------------
 
-# For the full topology
-N_ROUTERS = 2
-N_HOSTSEACH = 2
-
-R_OUTFILE = "router_out.txt"
-R_ERRFILE = "router_err.txt"
-LOGDIR = "hosts_output"
-ARP_TABLE = "arp_table.txt"
-
-# If this is low there are bunch of annoying race conditions; this makes
-# testing last veeeery long, but at least it's somewhat robust even on
-# low-resource machines.
-TIMEOUT = 4
-
-BASE_FORMATS = {
-        "host_name": "h-{}",
-        "router_if_name": "r-{}",
-        "host_if_name": "h-{}",
-        "router_ip": "192.168.{}.1",
-        "router_name": "router-{}",
-        "host_ip": "192.168.{}.2",
-        "router_mac": "de:fe:c8:ed:{1:02X}:{0:02X}",
-        "host_mac": "de:ad:be:ef:00:{:02X}",
-        "output_file": "{}-host-out.txt",
-        "error_file": "{}-host-err.txt",
-        "r2r_ip1": "192.{}.{}.1",
-        "r2r_ip2": "192.{}.{}.2",
-        "r2r_if_name": "rr-{}-{}",
-        "r2r_mac": "ca:fe:ba:be:{:02X}:{:02X}",
-        "out_file": "router_{}_out",
-        "err_file": "router_{}_err",
-        "rtable": "rtable{}.txt"
-}
+____________Description___________
 
 
-def get(value, first=None, second=None):
-    return BASE_FORMATS[value].format(first, second)
-N_HOSTS = 4
+        The project implements a dataplane for a real router. ICMP, IPv4, ARP
+protocols were used during implementation. The router is capable of receiving 
+packets and finding the route they have to be transmitted to.
 
-# For the full topology
-N_ROUTERS = 2
-N_HOSTSEACH = 2
+        The router is capable of generating ARP requests to be able to 
+find MAC addresses of these next hops. It also capable of generating ARP replies
+and when it receives an ARP reply it uses a cache to store ARP pairs consisting
+of MAC and IP addresses.
 
-R_OUTFILE = "router_out.txt"
-R_ERRFILE = "router_err.txt"
-LOGDIR = "hosts_output"
-ARP_TABLE = "arp_table.txt"
+        ICMP is used for generating an echo when the router itself is the target
+of the ping and also for generating an error when time to live expired or when
+there is no route to the destination (it is unreachable).
 
-# If this is low there are bunch of annoying race conditions; this makes
-# testing last veeeery long, but at least it's somewhat robust even on
-# low-resource machines.
-TIMEOUT = 4
-
-BASE_FORMATS = {
-        "host_name": "h-{}",
-        "router_if_name": "r-{}",
-        "host_if_name": "h-{}",
-        "router_ip": "192.168.{}.1",
-        "router_name": "router-{}",
-        "host_ip": "192.168.{}.2",
-        "router_mac": "de:fe:c8:ed:{1:02X}:{0:02X}",
-        "host_mac": "de:ad:be:ef:00:{:02X}",
-        "output_file": "{}-host-out.txt",
-        "error_file": "{}-host-err.txt",
-        "r2r_ip1": "192.{}.{}.1",
-        "r2r_ip2": "192.{}.{}.2",
-        "r2r_if_name": "rr-{}-{}",
-        "r2r_mac": "ca:fe:ba:be:{:02X}:{:02X}",
-        "out_file": "router_{}_out",
-        "err_file": "router_{}_err",
-        "rtable": "rtable{}.txt"
-}
+-----------------------------------------------------------------------------
 
 
-def get(value, first=None, second=None):
-    return BASE_FORMATS[value].format(first, second)
-N_HOSTS = 4
 
-# For the full topology
-N_ROUTERS = 2
-N_HOSTSEACH = 2
+------------------------------------------------------------------------------
 
-R_OUTFILE = "router_out.txt"
-R_ERRFILE = "router_err.txt"
-LOGDIR = "hosts_output"
-ARP_TABLE = "arp_table.txt"
-
-# If this is low there are bunch of annoying race conditions; this makes
-# testing last veeeery long, but at least it's somewhat robust even on
-# low-resource machines.
-TIMEOUT = 4
-
-BASE_FORMATS = {
-        "host_name": "h-{}",
-        "router_if_name": "r-{}",
-        "host_if_name": "h-{}",
-        "router_ip": "192.168.{}.1",
-        "router_name": "router-{}",
-        "host_ip": "192.168.{}.2",
-        "router_mac": "de:fe:c8:ed:{1:02X}:{0:02X}",
-        "host_mac": "de:ad:be:ef:00:{:02X}",
-        "output_file": "{}-host-out.txt",
-        "error_file": "{}-host-err.txt",
-        "r2r_ip1": "192.{}.{}.1",
-        "r2r_ip2": "192.{}.{}.2",
-        "r2r_if_name": "rr-{}-{}",
-        "r2r_mac": "ca:fe:ba:be:{:02X}:{:02X}",
-        "out_file": "router_{}_out",
-        "err_file": "router_{}_err",
-        "rtable": "rtable{}.txt"
-}
+____________Implementation____________
 
 
-def get(value, first=None, second=None):
-    return BASE_FORMATS[value].format(first, second)
-N_HOSTS = 4
-
-# For the full topology
-N_ROUTERS = 2
-N_HOSTSEACH = 2
-
-R_OUTFILE = "router_out.txt"
-R_ERRFILE = "router_err.txt"
-LOGDIR = "hosts_output"
-ARP_TABLE = "arp_table.txt"
-
-# If this is low there are bunch of annoying race conditions; this makes
-# testing last veeeery long, but at least it's somewhat robust even on
-# low-resource machines.
-TIMEOUT = 4
-
-BASE_FORMATS = {
-        "host_name": "h-{}",
-        "router_if_name": "r-{}",
-        "host_if_name": "h-{}",
-        "router_ip": "192.168.{}.1",
-        "router_name": "router-{}",
-        "host_ip": "192.168.{}.2",
-        "router_mac": "de:fe:c8:ed:{1:02X}:{0:02X}",
-        "host_mac": "de:ad:be:ef:00:{:02X}",
-        "output_file": "{}-host-out.txt",
-        "error_file": "{}-host-err.txt",
-        "r2r_ip1": "192.{}.{}.1",
-        "r2r_ip2": "192.{}.{}.2",
-        "r2r_if_name": "rr-{}-{}",
-        "r2r_mac": "ca:fe:ba:be:{:02X}:{:02X}",
-        "out_file": "router_{}_out",
-        "err_file": "router_{}_err",
-        "rtable": "rtable{}.txt"
-}
+    The entire assignment was implemented in the program with all the
+requirements.
 
 
-def get(value, first=None, second=None):
-    return BASE_FORMATS[value].format(first, second)
+	The implementation consists of two main functions which handle each
+type of packet received in the router:
+
+        - handle_ipv4 ----> 
+
+                [/!\] Step_1 - check to see if packet is corrupt due to invalid 
+                        checksum.
+
+                [/!\] Step_2 - check to see if MAC destination is the router or the
+                        broadcast address.
+
+                [/!\] Step_3 - send an ICMP echo response if the router is himself
+                        the destination ip.
+
+                [/!\] Step_4 - check to see if time to live expired and if it did 
+                        then drop the package.
+
+                [/!\] Step_5 - search for a next hop with the LPM (longest prefix match)
+                        function.
+
+                        **LPM is implemented using binary search on the sorted route
+                        table for improved time complexity. After it finds all the prefixes 
+                        that match the destination address in the packet, it will choose 
+                        the entry in the routing table corresponding to the longest prefix
+
+                             - if we dont find a route then send an ICMP error for
+                        destination unreachable.
+                             - if we find a route we search in the ARP cache for the MAC
+                        we have to send to and if we dont find it we add the packet to
+                        a queue and make an ARP request to find it.
+
+
+
+        - handle_arp ----> 
+
+                [/!\] Step_1 - check to see if packet is an ARP reply from some host.
+                             - if it is then add the response in the ARP cache.
+
+                [/!\] Step_2 - check to see if packet is an ARP request from some host.
+                             - if it is then generate a reply and send it back.
+
+
+
+
+        - update_checksum ---->
+
+        This function updates the checksum value in an IPv4 header
+        by recalculating the checksum based on the current contents of the header.
+
+        The function first sets the existing checksum field in the header to 0 to prepare for
+        the new checksum calculation. It then creates a pointer to the header data as an array
+        of 16-bit unsigned integers (u_int16_t), and determines the number of 16-bit words in
+        the header by dividing its size in bytes by 2 (shifting right by 1 bit).
+
+        The function then iterates over each 16-bit word in the header and adds it to a running 
+        total sum. After iterating over all words, the function adds the high and low 16 bits 
+        of sum together, with any overflow from the low 16 bits being added to the high 16 bits.
+        Finally, the function takes the one's complement of the resulting sum and stores it in 
+        the checksum field of the header.
+
+
+
+------------------------------------------------------------------------------
+
+
+
+
+------------------------------------------------------------------------------
+
+_____________Comments_____________
+
+	
+	The implementation could have been done faster and better if I 
+understood the theoretic part easier and realized how to debug network
+problems using wireshark and simulating a mini network using mininet.
+
+        The more complicated part was making sure I dont put an address
+wrong at any level or that I do check for all the corruption cases.
+
+        After completing the implementation I can say I have a better
+understanding of how a router realises the process of forwarding packets
+that get to it.
+
+------------------------------------------------------------------------------
+
+
+
+------------------------------------------------------------------------------
+
+
+______________How to run it_____________
+
+
+	make
+- creates the router executable
+
+        sudo ./checker/checker.sh
+- runs the automated test
+
+
+-----------------------------------------------------------------------------
+
+
+
+
+-----------------------------------------------------------------------------
+
+
+Resources:
+
+https://pcom.pages.upb.ro/tema1/about.html
+https://gitlab.cs.pub.ro/pcom/labs
+https://www.youtube.com/watch?v=rPoalUa4m8E&list=PLowKtXNTBypH19whXTVoG3oKSuOcw_XeW&index=8
+https://www.youtube.com/watch?v=aamG4-tH_m8&list=PLowKtXNTBypH19whXTVoG3oKSuOcw_XeW&index=9
+https://www.youtube.com/watch?v=xNbdeyEI-nE&list=PLowKtXNTBypH19whXTVoG3oKSuOcw_XeW&index=12
+https://www.youtube.com/watch?v=VWJ8GmYnjTs&list=PLowKtXNTBypH19whXTVoG3oKSuOcw_XeW&index=11
+https://eclass.teicrete.gr/modules/document/file.php/TP326/%CE%98%CE%B5%CF%89%CF%81%CE%AF%CE%B1%20(Lectures)/Computer_Networking_A_Top-Down_Approach.pdf
+
+
+
+-----------------------------------------------------------------------------

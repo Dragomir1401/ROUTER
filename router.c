@@ -30,9 +30,11 @@ void setup(struct route_table_entry **rtable, uint_fast32_t *rtable_size,
 		   queue *packet_queue, char *path)
 {
 
-	// Alloc a struct for the routes table and store routes
+	// Alloc a struct for the routes table
 	*rtable = calloc(MAX_ENTRIES_RTABLE, sizeof(struct route_table_entry));
 	DIE(*rtable == NULL, "Error at allocating memory for rtable.\n");
+
+	// Read rtable to store routes
 	*rtable_size = read_rtable(path, *rtable);
 	DIE(rtable_size < 0, "Rtable is empty.\n");
 
@@ -44,6 +46,8 @@ void setup(struct route_table_entry **rtable, uint_fast32_t *rtable_size,
 	// Create ARP cache to store already found addresses to make a more efficient implementation
 	*arp_cache = calloc(MAX_ENTRIES_ARP_CACHE, sizeof(struct arp_entry));
 	DIE(*arp_cache == NULL, "Error at allocating memory for ARP cache.\n");
+
+	// Set initial size to 0
 	*arp_cache_size = 0;
 
 	// Store the default broadcast address in a buffer
@@ -58,6 +62,7 @@ void setup(struct route_table_entry **rtable, uint_fast32_t *rtable_size,
 void free_resources(struct route_table_entry **rtable,
 					struct arp_entry **arp_cache, uint8_t **broadcast_addr)
 {
+	// Empty memory adresses
 	free(*rtable);
 	free(*arp_cache);
 	free(*broadcast_addr);
@@ -65,14 +70,35 @@ void free_resources(struct route_table_entry **rtable,
 
 char *mac_to_str(uint8_t mac[6])
 {
+	// Transform MAC to string for printable
 	static char str[18];
 	sprintf(str, "%02x:%02x:%02x:%02x:%02x:%02x",
 			mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 	return str;
 }
 
+void print_packet_info(char message[30], struct in_addr src_ip, uint8_t *src_mac, struct in_addr dst_ip, uint8_t *dst_mac, int interface)
+{
+	// Helper printer function
+	printf("%s\n", message);
+	printf("Source      --- %s .\n", inet_ntoa(src_ip));
+	printf("MAC source  --- %s\n", mac_to_str(src_mac));
+	printf("Destination --- %s.\n", inet_ntoa(dst_ip));
+	printf("MAC destin  --- %s\n", mac_to_str(dst_mac));
+	printf("Via interface %d.\n\n", interface);
+}
+
+void print_route_info(char message[30], struct in_addr src_ip, struct in_addr next_hop)
+{
+	// Helper printer function
+	printf("%s\n", message);
+	printf("Source   --- %s.\n", inet_ntoa(src_ip));
+	printf("Next hop --- %s from the route table.\n\n", inet_ntoa(next_hop));
+}
+
 void add_arp_cache_entry(struct arp_entry *arp_cache, uint_fast32_t *arp_cache_size, struct arp_entry *new_entry)
 {
+	// Search to see if entry already exits
 	int cnt = 0;
 	while (cnt < *arp_cache_size)
 	{
@@ -85,22 +111,25 @@ void add_arp_cache_entry(struct arp_entry *arp_cache, uint_fast32_t *arp_cache_s
 		cnt++;
 	}
 
+	// It does exit so exit
 	if (cnt == -1)
 	{
 		return;
 	}
 
+	// Print message
 	struct in_addr ip_addr;
 	ip_addr.s_addr = new_entry->ip;
 	printf("Adding entry in arp cache: ip: %s mac: %s.\n\n", inet_ntoa(ip_addr), mac_to_str(new_entry->mac));
 
-	// Insert the new entry at the end
+	// Insert the new entry at the end and increase size
 	arp_cache[(*arp_cache_size)] = *new_entry;
 	(*arp_cache_size)++;
 }
 
 int binary_search(struct route_table_entry *rtable, uint32_t searched_ip, int left, int right)
 {
+	// Function to binary search for LPM in the route table
 	int mid = (left + right) / 2;
 
 	while (left <= right)
@@ -127,6 +156,7 @@ int binary_search(struct route_table_entry *rtable, uint32_t searched_ip, int le
 struct route_table_entry *LPM(uint32_t daddr, struct route_table_entry *rtable,
 							  uint_fast32_t rtable_size)
 {
+	// Try to find entry in the route table and return -1 if it does not exit
 	int pos = binary_search(rtable, daddr, 0, rtable_size - 1);
 	return (pos == -1) ? NULL : &rtable[pos];
 }
@@ -151,6 +181,7 @@ void update_packet(struct route_table_entry **route_entry, struct arp_entry arp_
 void search_next_hop(struct route_table_entry *route_entry, struct arp_entry *arp_cache,
 					 uint_fast32_t *arp_cache_size, queue q)
 {
+	// Search int the arp cache for next hop MAC
 	for (int arp_cnt = 0; arp_cnt < *arp_cache_size; arp_cnt++)
 	{
 		if (route_entry->next_hop == arp_cache[arp_cnt].ip)
@@ -161,29 +192,31 @@ void search_next_hop(struct route_table_entry *route_entry, struct arp_entry *ar
 void pop_from_queue(queue packet_queue, struct arp_entry *arp_cache, uint_fast32_t arp_cache_size,
 					struct route_table_entry *rtable, uint_fast32_t rtable_size, int len)
 {
+	// Check to see if queue has elements
 	if (queue_empty(packet_queue))
 	{
 		return;
 	}
 
 	// Extract packet and headers
-	char *buf = (char *)queue_deq(packet_queue);
+	char *buf = malloc(MAX_PACKET_LEN);
+	buf = (char *)queue_deq(packet_queue);
 	struct iphdr *iphdr = (struct iphdr *)(buf + sizeof(struct ether_header));
 
 	// Search entry in route table
 	struct route_table_entry *entry = LPM(iphdr->daddr, rtable, rtable_size);
-	struct in_addr ip_addr;
-	printf("Found route for packet dequeued:\n");
-	ip_addr.s_addr = iphdr->saddr;
-	printf("Source   --- %s.\n", inet_ntoa(ip_addr));
-	ip_addr.s_addr = entry->next_hop;
-	printf("Next hop --- %s from the route table.\n\n", inet_ntoa(ip_addr));
 
+	// Print route if found
+	struct in_addr src_ip;
+	src_ip.s_addr = iphdr->saddr;
+	print_route_info("Found route for packet dequeued:", src_ip, *(struct in_addr *)&entry->next_hop);
+
+	// Search for next hop and send to it if found
 	for (int cnt = 0; cnt < arp_cache_size; cnt++)
 	{
 		if (entry->next_hop == arp_cache[cnt].ip)
 		{
-
+			// Extract Ethernet header
 			struct ether_header *ethhdr = (struct ether_header *)buf;
 
 			// Extract new MAC
@@ -194,15 +227,9 @@ void pop_from_queue(queue packet_queue, struct arp_entry *arp_cache, uint_fast32
 			memmove(ethhdr->ether_shost, MAC, MAC_ADDR_SIZE);
 			memmove(ethhdr->ether_dhost, arp_cache[cnt].mac, MAC_ADDR_SIZE);
 
-			struct in_addr ip_addr;
-			ip_addr.s_addr = iphdr->saddr;
-			printf("Sending packet from queue...\n");
-			printf("Source 	    --- %s .\n", inet_ntoa(ip_addr));
-			printf("MAC source  --- %s\n", mac_to_str(ethhdr->ether_shost));
-			ip_addr.s_addr = entry->next_hop;
-			printf("Destination --- %s.\n", inet_ntoa(ip_addr));
-			printf("MAC destin  --- %s\n", mac_to_str(ethhdr->ether_dhost));
-			printf("Via interface %d.\n\n", entry->interface);
+			struct in_addr src_ip;
+			src_ip.s_addr = iphdr->saddr;
+			print_packet_info("Sending packet from queue...", src_ip, ethhdr->ether_shost, *(struct in_addr *)&entry->next_hop, ethhdr->ether_dhost, entry->interface);
 
 			// Send packet to next hop
 			send_to_link(entry->interface, buf, len);
@@ -231,12 +258,11 @@ void handle_arp_reply(struct arp_header *arp_hdr, struct arp_entry *arp_cache, u
 	inet_ntop(AF_INET, &(arp_hdr->tpa), next_hop_addr_str, INET_ADDRSTRLEN);
 	fprintf(stderr, "Next hop IP address: %s\n", next_hop_addr_str);
 
-	// Create a new ARP cache entry
+	// Create a new ARP cache entry and add it to arp cache
 	struct arp_entry new_entry = {
 		.ip = arp_hdr->spa,
 	};
-
-	memcpy(new_entry.mac, arp_hdr->sha, MAC_ADDR_SIZE);
+	memmove(new_entry.mac, arp_hdr->sha, MAC_ADDR_SIZE);
 	add_arp_cache_entry(arp_cache, arp_cache_size, &new_entry);
 
 	// Check if the packet can be sent now
@@ -265,60 +291,66 @@ void arp_reply(char *buf, uint8_t *dest_mac, uint8_t *source_mac, uint32_t ip_da
 		.htype = htons(1),
 		.hlen = 6,
 	};
+
+	// Set up sendder and reciever MAC's
 	memmove(arphdr.sha, source_mac, MAC_ADDR_SIZE);
 	memmove(arphdr.tha, dest_mac, MAC_ADDR_SIZE);
+
+	// Set up sendder and reciever ip's
 	arphdr.spa = ip_saddr;
 	arphdr.tpa = ip_daddr;
+
+	// Put the header in place
 	memmove(new_packet + sizeof(struct ether_header), &arphdr, sizeof(struct arp_header));
 
 	// Send packet
-	printf("Sending packet from arp reply...\n");
-	printf("Source      --- %s.\n", inet_ntoa(*(struct in_addr *)&ip_saddr));
-	printf("Destination --- %s.\n\n", inet_ntoa(*(struct in_addr *)&ip_daddr));
+	print_packet_info("Sending packet from arp reply...", *(struct in_addr *)&ip_saddr, source_mac, *(struct in_addr *)&ip_daddr, dest_mac, interface);
 	send_to_link(interface, new_packet, len);
 
 	// Free memory
 	free(new_packet);
 }
 
-void arp_request(struct route_table_entry *router_entry)
+void arp_request(struct route_table_entry *router_entry, uint8_t *broadcast_addr)
 {
 	// Prepare Ethernet and ARP headers
 	struct ether_header eth_header = {
 		.ether_type = htons(ETHERTYPE_ARP),
 	};
 	struct arp_header arp_header = {
-		.htype = htons(1), // Ethernet
+		.htype = htons(1),
 		.ptype = htons(ETH_P_IP),
 		.hlen = MAC_ADDR_SIZE,
 		.plen = sizeof(in_addr_t),
 		.op = htons(ARP_REQUEST),
 	};
+
+	// Get route MAC
 	get_interface_mac(router_entry->interface, eth_header.ether_shost);
-	memcpy(eth_header.ether_dhost, "\xff\xff\xff\xff\xff\xff", MAC_ADDR_SIZE);
 	get_interface_mac(router_entry->interface, arp_header.sha);
+
+	// Set destination MAC to broadcast
+	memmove(eth_header.ether_dhost, broadcast_addr, MAC_ADDR_SIZE);
+	memmove(arp_header.tha, broadcast_addr, MAC_ADDR_SIZE);
+
+	// Get route ip and destination ip to next hop
 	arp_header.spa = inet_addr(get_interface_ip(router_entry->interface));
 	arp_header.tpa = router_entry->next_hop;
-	memset(arp_header.tha, 0, MAC_ADDR_SIZE);
 
 	// Allocate buffer and copy Ethernet and ARP headers
 	char *packet_buffer = malloc(MAX_PACKET_LEN);
-	if (!packet_buffer)
-	{
-		perror("Malloc for new packet buffer.\n");
-		return;
-	}
-	memcpy(packet_buffer, &eth_header, sizeof(struct ether_header));
-	memcpy(packet_buffer + sizeof(struct ether_header), &arp_header, sizeof(struct arp_header));
+	DIE(!packet_buffer, "Malloc for new packet buffer.\n");
+	memset(packet_buffer, 0, MAX_PACKET_LEN);
 
-	// Send the ARP request packet
+	// Put headers in place
+	memmove(packet_buffer, &eth_header, sizeof(struct ether_header));
+	memmove(packet_buffer + sizeof(struct ether_header), &arp_header, sizeof(struct arp_header));
+
+	// Print info and send the ARP request packet
 	printf("Sending ARP request from %s to %s\n",
 		   inet_ntoa(*(struct in_addr *)&arp_header.spa),
 		   inet_ntoa(*(struct in_addr *)&arp_header.tpa));
 	send_to_link(router_entry->interface, packet_buffer, sizeof(struct ether_header) + sizeof(struct arp_header));
-
-	// Clean up
-	free(packet_buffer);
 }
 
 int handle_arp(char *buf, struct arp_entry *arp_cache, uint_fast32_t *arp_cache_size,
@@ -340,27 +372,26 @@ int handle_arp(char *buf, struct arp_entry *arp_cache, uint_fast32_t *arp_cache_
 	// Request case -> reply with the local interface MAC
 	if (arp_hdr->op == htons(1))
 	{
+		// Get MAC of route
 		uint8_t *local_mac = malloc(MAC_ADDR_SIZE);
 		get_interface_mac(interface, local_mac);
 
+		// Inverse sender with target MAC
 		uint8_t *target_mac = malloc(MAC_ADDR_SIZE);
 		memmove(target_mac, arp_hdr->sha, MAC_ADDR_SIZE);
 
-		uint32_t sender_ip = arp_hdr->spa;
-		uint32_t reciever_ip = arp_hdr->tpa;
+		// Reply to ARP request
+		arp_reply(buf, target_mac, local_mac, arp_hdr->spa, arp_hdr->tpa, interface, len);
 
-		arp_reply(buf, target_mac, local_mac, sender_ip, reciever_ip, interface, len);
-
+		// Exit
 		return -1;
 	}
 
-	return -1;
+	return 0;
 }
 
 void update_checksum(struct iphdr *iphdr)
 {
-	// Decrement the TTL
-	iphdr->ttl--;
 
 	// Update the checksum
 	iphdr->check = 0;
@@ -434,10 +465,11 @@ void send_icmp_message(char *buf, int interface, struct iphdr *iphdr, struct eth
 		send_to_link(interface, new_packet, sizeof(struct ether_header) + sizeof(struct iphdr) + sizeof(struct icmphdr));
 	}
 }
+
 int check_ttl(struct ether_header *ethhdr, struct iphdr *iphdr, char *buf, int interface)
 {
 	// Throw packages with ttl 0 or 1
-	if (iphdr->ttl < 2)
+	if (iphdr->ttl <= 1)
 	{
 		printf("Time limit was reached...Dropping package.\n");
 
@@ -472,18 +504,23 @@ int check_ttl(struct ether_header *ethhdr, struct iphdr *iphdr, char *buf, int i
 		return -1;
 	}
 
+	// Decrement the TTL
+	iphdr->ttl--;
+
+	// Update the checksum
 	update_checksum(iphdr);
 	return 0;
 }
 
 int search_ip_arp_cache(struct arp_entry *arp_table, int arp_table_len, uint32_t searched_ip, uint8_t *mac_targeted)
 {
+	// Search liniar for the next hop MAC in the arp cache
 	struct arp_entry *entry;
 	for (entry = arp_table; entry < arp_table + arp_table_len; ++entry)
 	{
 		if (entry->ip == searched_ip)
 		{
-			memcpy(mac_targeted, entry->mac, MAC_ADDR_SIZE);
+			memmove(mac_targeted, entry->mac, MAC_ADDR_SIZE);
 			return 0;
 		}
 	}
@@ -491,8 +528,8 @@ int search_ip_arp_cache(struct arp_entry *arp_table, int arp_table_len, uint32_t
 }
 
 int search_destination(struct iphdr *iphdr, struct ether_header *ethhdr, struct route_table_entry *rtable,
-					   uint_fast32_t rtable_size, int interface, char *buf, struct arp_entry *arp_cache,
-					   uint_fast32_t arp_cache_size, int len, queue packet_queue)
+					   uint_fast32_t rtable_size, int *interface, char *buf, struct arp_entry *arp_cache,
+					   uint_fast32_t arp_cache_size, int len, queue packet_queue, uint8_t *broadcast_addr)
 {
 	// Search with LPM in the route table
 	struct route_table_entry *LPM_addr = LPM(iphdr->daddr, rtable, rtable_size);
@@ -520,11 +557,11 @@ int search_destination(struct iphdr *iphdr, struct ether_header *ethhdr, struct 
 		uint8_t *source_mac = malloc(MAC_ADDR_SIZE);
 
 		// Copy the MAC addresses from the Ethernet header
-		memcpy(dest_mac, ethhdr->ether_dhost, MAC_ADDR_SIZE);
-		memcpy(source_mac, ethhdr->ether_shost, MAC_ADDR_SIZE);
+		memmove(dest_mac, ethhdr->ether_dhost, MAC_ADDR_SIZE);
+		memmove(source_mac, ethhdr->ether_shost, MAC_ADDR_SIZE);
 
 		// Send ICMP error message
-		send_icmp_message(buf, interface, iphdr, ethhdr, &icmp_header, source_mac, dest_mac, ERROR);
+		send_icmp_message(buf, *interface, iphdr, ethhdr, &icmp_header, source_mac, dest_mac, ERROR);
 
 		// Free the allocated memory for the MAC addresses
 		free(dest_mac);
@@ -534,12 +571,7 @@ int search_destination(struct iphdr *iphdr, struct ether_header *ethhdr, struct 
 	}
 
 	// Print with correct layout
-	struct in_addr ip_addr;
-	ip_addr.s_addr = iphdr->saddr;
-	printf("Found route for:\n");
-	printf("Source   -- %s.\n", inet_ntoa(ip_addr));
-	ip_addr.s_addr = LPM_addr->next_hop;
-	printf("Next hop -- %s from the route table.\n\n", inet_ntoa(ip_addr));
+	print_route_info("Found route in the route table for:", *(struct in_addr *)&iphdr->saddr, *(struct in_addr *)&LPM_addr->next_hop);
 
 	// Find next mac to send the packet to
 	uint8_t *next_mac = malloc(MAC_ADDR_SIZE);
@@ -553,33 +585,27 @@ int search_destination(struct iphdr *iphdr, struct ether_header *ethhdr, struct 
 
 		// Change MAC destination
 		get_interface_mac(LPM_addr->interface, ethhdr->ether_shost);
-		memcpy(ethhdr->ether_dhost, next_mac, MAC_ADDR_SIZE);
+		memmove(ethhdr->ether_dhost, next_mac, MAC_ADDR_SIZE);
 
-		struct in_addr ip_addr;
-		ip_addr.s_addr = iphdr->saddr;
-		printf("Sending packet...\n");
-		printf("Source      --- %s.\n", inet_ntoa(ip_addr));
-		ip_addr.s_addr = iphdr->daddr;
-		printf("Destination --- %s.\n", inet_ntoa(ip_addr));
-		printf("Interface: %d\n\n", LPM_addr->interface);
+		print_packet_info("Sending packet on found destination:", *(struct in_addr *)&iphdr->saddr,
+						  ethhdr->ether_shost, *(struct in_addr *)&iphdr->daddr, ethhdr->ether_dhost, LPM_addr->interface);
 		// Send to the found in arp cache address
-		send_to_link(LPM_addr->interface, buf, len);
+		*interface = LPM_addr->interface;
+		send_to_link(*interface, buf, len);
 
 		// Exit
 		return -1;
 	}
 
-	// If we dont find next MAC in arp cache then make an ARP request to find it
-	ip_addr.s_addr = iphdr->saddr;
-	printf("Enqueuing package...\n");
-	printf("Source      --- %s.\n", inet_ntoa(ip_addr));
-	ip_addr.s_addr = iphdr->daddr;
-	printf("Destination --- %s.\n", inet_ntoa(ip_addr));
-	printf("Interface: %d\n\n", interface);
-	queue_enq(packet_queue, buf);
+	// Print packet info
+	print_packet_info("Enqueuing package:", *(struct in_addr *)&iphdr->saddr,
+					  ethhdr->ether_shost, *(struct in_addr *)&iphdr->daddr, ethhdr->ether_dhost, LPM_addr->interface);
 
 	// Make an ARP request
-	arp_request(LPM_addr);
+	arp_request(LPM_addr, broadcast_addr);
+
+	// If we dont find next MAC in arp cache then make an ARP request to find it and add packet in queue
+	queue_enq(packet_queue, buf);
 
 	// Exit
 	return -1;
@@ -593,8 +619,8 @@ void icmp_echo(struct iphdr *iphdr, struct ether_header *ethhdr, struct icmphdr 
 	uint8_t *source_mac = malloc(MAC_ADDR_SIZE);
 
 	// Copy destination and source MAC addresses
-	memcpy(dest_mac, ethhdr->ether_dhost, MAC_ADDR_SIZE);
-	memcpy(source_mac, ethhdr->ether_shost, MAC_ADDR_SIZE);
+	memmove(dest_mac, ethhdr->ether_dhost, MAC_ADDR_SIZE);
+	memmove(source_mac, ethhdr->ether_shost, MAC_ADDR_SIZE);
 
 	// Create new ICMP Header for error
 	struct icmphdr new_icmphdr = {
@@ -612,7 +638,7 @@ void icmp_echo(struct iphdr *iphdr, struct ether_header *ethhdr, struct icmphdr 
 }
 
 int handle_ipv4(char *buf, int interface, int len, struct arp_entry *arp_cache, uint_fast32_t *arp_cache_size,
-				queue packet_queue, struct route_table_entry *rtable, uint_fast32_t *rtable_size)
+				queue packet_queue, struct route_table_entry *rtable, uint_fast32_t *rtable_size, uint8_t *broadcast_addr)
 {
 	printf("Entering IPv4 protocol...\n");
 
@@ -622,13 +648,15 @@ int handle_ipv4(char *buf, int interface, int len, struct arp_entry *arp_cache, 
 	// Extract ip header
 	struct iphdr *iphdr = (struct iphdr *)(buf + sizeof(struct ether_header));
 
-	struct in_addr ip_addr;
-	ip_addr.s_addr = iphdr->saddr;
-	printf("Recieved IPv4 package...\n");
-	printf("Source      --- %s.\n", inet_ntoa(ip_addr));
-	ip_addr.s_addr = iphdr->daddr;
-	printf("Destination --- %s.\n", inet_ntoa(ip_addr));
-	printf("Interface: %d\n\n", interface);
+	print_packet_info("Recieved IP package:", *(struct in_addr *)&iphdr->saddr,
+					  ethhdr->ether_shost, *(struct in_addr *)&iphdr->daddr, ethhdr->ether_dhost, interface);
+
+	// Verify the checksum
+	if (checksum((void *)iphdr, sizeof(struct iphdr)))
+	{
+		printf("Checksum test could not be validated.\n");
+		return -1;
+	}
 
 	// Check for case where the router itself is the destination
 	if (iphdr->daddr == inet_addr(get_interface_ip(interface)))
@@ -642,13 +670,6 @@ int handle_ipv4(char *buf, int interface, int len, struct arp_entry *arp_cache, 
 		return -1;
 	}
 
-	// Verify the checksum
-	if (checksum((void *)iphdr, sizeof(struct iphdr)))
-	{
-		printf("Checksum test could not be validated.\n");
-		return -1;
-	}
-
 	// Check to see if ttl dropped below 2
 	if (check_ttl(ethhdr, iphdr, buf, interface) == -1)
 	{
@@ -656,8 +677,8 @@ int handle_ipv4(char *buf, int interface, int len, struct arp_entry *arp_cache, 
 	}
 
 	// Search to see if router has address in route table
-	if (search_destination(iphdr, ethhdr, rtable, *rtable_size, interface,
-						   buf, arp_cache, *arp_cache_size, len, packet_queue) == -1)
+	if (search_destination(iphdr, ethhdr, rtable, *rtable_size, &interface,
+						   buf, arp_cache, *arp_cache_size, len, packet_queue, broadcast_addr) == -1)
 	{
 		return -1;
 	}
@@ -667,6 +688,7 @@ int handle_ipv4(char *buf, int interface, int len, struct arp_entry *arp_cache, 
 
 int compare_MAC(uint8_t *addr1, uint8_t *addr2)
 {
+	// Compare 2 MAC addresses
 	int i = 0;
 	while (i < MAC_ADDR_SIZE && addr1[i] == addr2[i])
 	{
@@ -677,12 +699,15 @@ int compare_MAC(uint8_t *addr1, uint8_t *addr2)
 		// They are equal
 		return 0;
 	}
+
 	// They are not equal
 	return -1;
 }
 
 int validate_L2(struct ether_header *eth_hdr, uint8_t *broadcast_addr, int interface)
 {
+	// Verifies if the router itself or the broadcast address are the destination or not
+
 	// Get interface MAC
 	uint8_t *interface_MAC = malloc(MAC_ADDR_SIZE);
 	get_interface_mac(interface, interface_MAC);
@@ -714,6 +739,7 @@ int main(int argc, char *argv[])
 
 	// Call setup
 	setup(&rtable, &rtable_size, &arp_cache, &arp_cache_size, &broadcast_addr, &packet_queue, argv[1]);
+
 	while (1)
 	{
 
@@ -728,10 +754,6 @@ int main(int argc, char *argv[])
 		memmove(packet, buf, MAX_PACKET_LEN);
 
 		struct ether_header *eth_hdr = (struct ether_header *)packet;
-		/* Note that packets received are in network order,
-		any header field which has more than 1 byte will need to be converted to
-		host order. For example, ntohs(eth_hdr->ether_type). The oposite is needed when
-		sending a packet on the link, */
 
 		// Handle IP protocol case
 		if (ntohs(eth_hdr->ether_type) == ETHERTYPE_IP)
@@ -742,7 +764,7 @@ int main(int argc, char *argv[])
 
 			// Handle IP protocol
 			if (handle_ipv4(packet, interface, len, arp_cache,
-							&arp_cache_size, packet_queue, rtable, &rtable_size) == -1)
+							&arp_cache_size, packet_queue, rtable, &rtable_size, broadcast_addr) == -1)
 				continue;
 		}
 
