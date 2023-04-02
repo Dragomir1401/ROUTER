@@ -262,6 +262,7 @@ void handle_arp_reply(struct arp_header *arp_hdr, struct arp_entry *arp_cache, u
 	struct arp_entry new_entry = {
 		.ip = arp_hdr->spa,
 	};
+
 	memmove(new_entry.mac, arp_hdr->sha, MAC_ADDR_SIZE);
 	add_arp_cache_entry(arp_cache, arp_cache_size, &new_entry);
 
@@ -287,9 +288,9 @@ void arp_reply(char *buf, uint8_t *dest_mac, uint8_t *source_mac, uint32_t ip_da
 	struct arp_header arphdr = {
 		.op = htons(ARP_REPLY),
 		.ptype = htons(2048),
-		.plen = 4,
+		.plen = IP_ADDR_SIZE,
 		.htype = htons(1),
-		.hlen = 6,
+		.hlen = MAC_ADDR_SIZE,
 	};
 
 	// Set up sendder and reciever MAC's
